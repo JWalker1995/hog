@@ -1,0 +1,42 @@
+
+cd abc/
+    node do_something
+
+
+Only ONE command may write to a file.
+Otherwise dependents don't know which to run first.
+
+There must be NO dependency loops involving more than one command.
+
+
+
+1. Run through. At nonexistent stats and nonexistent reads: choose whether to pause or continue.
+2. If a nonexistent file is later created and there is not a effect loop, either resume or rewind
+
+
+
+let run = function(cmds) {
+    cmds.forEach(function(cmd) {
+        run(cmd).on('nonexistent_stat', function(cont) {
+        }).on('nonexistent_read', function(cont) {
+        });
+    });
+}
+
+1: read A
+2: read B, write A
+
+Run 1. Pause at read A
+Run 2. Pause at read B
+Done.
+Unpause 1 at read A. Errors or something.
+Unpause 2 at read B. Writes A. Realize this changes 1. Rewind 1, replay 1.
+
+
+Run commands sequentially - Put in separate script
+Run command in subdirectory - Format like cd dir/ && cmd ...
+
+
+:shell abc
+
+# Abc
