@@ -18,8 +18,8 @@ public:
     };
 
     template <typename FuncType, typename... ArgTypes>
-    static signed int call(const std::string &func_name, FuncType func, ArgTypes... args) {
-        signed int res = func(args...);
+    static auto call(const std::string &func_name, FuncType func, ArgTypes... args) {
+        auto res = func(args...);
         handle_error<ArgTypes...>(res, func_name, args...);
         return res;
     }
@@ -27,7 +27,15 @@ public:
     template <typename... ArgTypes>
     static void handle_error(signed int res, const std::string &func_name, ArgTypes... args) {
         if (res < 0) {
-            std::string msg = func_name + "(" + args_to_string(args...) + ")";
+            std::string msg = func_name + "(" + args_to_string(args...) + ") -> " + std::to_string(res);
+            perror(msg.c_str());
+            throw Exception();
+        }
+    }
+    template <typename... ArgTypes>
+    static void handle_error(void *res, const std::string &func_name, ArgTypes... args) {
+        if (!res) {
+            std::string msg = func_name + "(" + args_to_string(args...) + ") -> (void*)NULL";
             perror(msg.c_str());
             throw Exception();
         }

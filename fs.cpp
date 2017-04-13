@@ -21,6 +21,8 @@
 #include <unistd.h>
 #include <assert.h>
 
+#include "cwrapper.h"
+
 #include <iostream>
 
 static const char *hello_str = "Hello World!\n";
@@ -169,33 +171,17 @@ void Fs::hook_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 }
 
 void Fs::start(const char *mountpoint) {
-    int res;
-
     char *argv[] = {
         (char *) "fuse_bindings_dummy"
     };
     struct fuse_args args = FUSE_ARGS_INIT(1, argv);
 
-    struct fuse_chan *ch = fuse_mount(mountpoint, &args);
-    if (!ch) {
-        throw Exception("fuse_mount returned a null pointer");
-    }
-
-    struct fuse_session *se = fuse_lowlevel_new(&args, &ops, sizeof(ops), this);
-    if (!se) {
-        throw Exception("fuse_lowlevel_new returned a null pointer");
-    }
-
-    res = fuse_set_signal_handlers(se);
-    if (res < 0) {
-        throw Exception("fuse_set_signal_handlers returned an error code: " + std::to_string(res));
-    }
-
+    struct fuse_chan *ch = CWrapper::call("fuse_mount", fuse_mount, mountpoint, &args);
+    struct fuse_session *se = CWrapper::call("fuse_lowlevel_new", fuse_lowlevel_new, &args, &ops, sizeof(ops), this);
+    CWrapper::call("fuse_set_signal_handlers", fuse_set_signal_handlers, se);
     fuse_session_add_chan(se, ch);
-    res = fuse_session_loop(se);
-    if (res < 0) {
-        throw Exception("fuse_session_loop returned an error code: " + std::to_string(res));
-    }
+
+    CWrapper::call("fuse_session_loop", fuse_session_loop, se);
 
     fuse_remove_signal_handlers(se);
     fuse_session_remove_chan(ch);
