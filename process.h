@@ -1,5 +1,5 @@
-#ifndef PROCESS_H
-#define PROCESS_H
+#ifndef HOG_PROCESS_H
+#define HOG_PROCESS_H
 
 #include "processenv.h"
 
@@ -14,4 +14,4 @@ private:
     int pid;
 };
 
-#endif // PROCESS_H
+#endif // HOG_PROCESS_H

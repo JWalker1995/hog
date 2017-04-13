@@ -7,15 +7,30 @@
 
 class CWrapper {
 public:
+    class Exception : public std::exception {
+    public:
+        Exception()
+        {}
+
+        virtual const char *what() const noexcept {
+            return "CWrapper::Exception";
+        }
+    };
+
     template <typename FuncType, typename... ArgTypes>
-    static bool call(const std::string &func_name, FuncType func, ArgTypes... args) {
+    static signed int call(const std::string &func_name, FuncType func, ArgTypes... args) {
         signed int res = func(args...);
+        handle_error<ArgTypes...>(res, func_name, args...);
+        return res;
+    }
+
+    template <typename... ArgTypes>
+    static void handle_error(signed int res, const std::string &func_name, ArgTypes... args) {
         if (res < 0) {
             std::string msg = func_name + "(" + args_to_string(args...) + ")";
             perror(msg.c_str());
-            return false;
+            throw Exception();
         }
-        return true;
     }
 
 private:

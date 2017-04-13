@@ -8,9 +8,11 @@
   gcc -Wall hello_ll.c `pkg-config fuse --cflags --libs` -o hello_ll
 */
 
-#define FUSE_USE_VERSION 26
+#include "fs.h"
 
+#define FUSE_USE_VERSION 26
 #include <fuse_lowlevel.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,7 +49,12 @@ static int hello_stat(fuse_ino_t ino, struct stat *stbuf)
     return 0;
 }
 
-static void hello_ll_getattr(fuse_req_t req, fuse_ino_t ino,
+void Fs::hook_init(void *userdata, fuse_conn_info *conn) {
+    (void) conn;
+    get_instance(userdata)->init_callback.call();
+}
+
+void Fs::hook_getattr(fuse_req_t req, fuse_ino_t ino,
                  struct fuse_file_info *fi)
 {
     std::cout << "getattr " << ino << std::endl;
@@ -63,7 +70,7 @@ static void hello_ll_getattr(fuse_req_t req, fuse_ino_t ino,
         fuse_reply_attr(req, &stbuf, 1.0);
 }
 
-static void hello_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
+void Fs::hook_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     std::cout << "lookup " << name << std::endl;
 
@@ -112,7 +119,7 @@ static int reply_buf_limited(fuse_req_t req, const char *buf, size_t bufsize,
         return fuse_reply_buf(req, NULL, 0);
 }
 
-static void hello_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
+void Fs::hook_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
                  off_t off, struct fuse_file_info *fi)
 {
     std::cout << "readdir " << ino << std::endl;
@@ -133,7 +140,7 @@ static void hello_ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size,
     }
 }
 
-static void hello_ll_open(fuse_req_t req, fuse_ino_t ino,
+void Fs::hook_open(fuse_req_t req, fuse_ino_t ino,
               struct fuse_file_info *fi)
 {
     std::cout << "open " << ino << std::endl;
@@ -146,7 +153,7 @@ static void hello_ll_open(fuse_req_t req, fuse_ino_t ino,
         fuse_reply_open(req, fi);
 }
 
-static void hello_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size,
+void Fs::hook_read(fuse_req_t req, fuse_ino_t ino, size_t size,
               off_t off, struct fuse_file_info *fi)
 {
     std::cout << "read " << ino << std::endl;
@@ -157,42 +164,41 @@ static void hello_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size,
     reply_buf_limited(req, hello_str, strlen(hello_str), off, size);
 }
 
-static void hello_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
+void Fs::hook_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
                            size_t size, off_t off, struct fuse_file_info *fi) {
 }
 
-static struct fuse_lowlevel_ops hello_ll_oper = {
-    .lookup		= hello_ll_lookup,
-    .getattr	= hello_ll_getattr,
-    .readdir	= hello_ll_readdir,
-    .open		= hello_ll_open,
-    .read		= hello_ll_read,
-};
+void Fs::start(const char *mountpoint) {
+    int res;
 
-bool hog_fs(const char *mountpoint) {
     char *argv[] = {
         (char *) "fuse_bindings_dummy"
     };
     struct fuse_args args = FUSE_ARGS_INIT(1, argv);
 
     struct fuse_chan *ch = fuse_mount(mountpoint, &args);
-    int err = -1;
-
-    if (ch != NULL) {
-        struct fuse_session *se;
-
-        se = fuse_lowlevel_new(&args, &hello_ll_oper, sizeof(hello_ll_oper), NULL);
-        if (se != NULL) {
-            if (fuse_set_signal_handlers(se) != -1) {
-                fuse_session_add_chan(se, ch);
-                err = fuse_session_loop(se);
-                fuse_remove_signal_handlers(se);
-                fuse_session_remove_chan(ch);
-            }
-            fuse_session_destroy(se);
-        }
-        fuse_unmount(mountpoint, ch);
+    if (!ch) {
+        throw Exception("fuse_mount returned a null pointer");
     }
 
-    return err ? 1 : 0;
+    struct fuse_session *se = fuse_lowlevel_new(&args, &ops, sizeof(ops), this);
+    if (!se) {
+        throw Exception("fuse_lowlevel_new returned a null pointer");
+    }
+
+    res = fuse_set_signal_handlers(se);
+    if (res < 0) {
+        throw Exception("fuse_set_signal_handlers returned an error code: " + std::to_string(res));
+    }
+
+    fuse_session_add_chan(se, ch);
+    res = fuse_session_loop(se);
+    if (res < 0) {
+        throw Exception("fuse_session_loop returned an error code: " + std::to_string(res));
+    }
+
+    fuse_remove_signal_handlers(se);
+    fuse_session_remove_chan(ch);
+    fuse_session_destroy(se);
+    fuse_unmount(mountpoint, ch);
 }

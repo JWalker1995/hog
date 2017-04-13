@@ -29,8 +29,10 @@ Process::Process(const ProcessEnv &env, const std::string &cmd) {
             (char *) 0,
         };
 
+        /*
         CWrapper::call("chroot", &chroot, env.root_path);
         CWrapper::call("chdir", &chdir, "/");
+        */
 
         CWrapper::call("execve", &execve, env.shell.c_str(), argv, envp);
     }
