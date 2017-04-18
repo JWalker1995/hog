@@ -3,23 +3,25 @@
 
 #include <string>
 
+#include "setupper.h"
 #include "fs.h"
 
-class uv_loop_t;
-class uv_poll_t;
+typedef struct uv_loop_s uv_loop_t;
+typedef struct uv_poll_s uv_poll_t;
 
 class Manager
 {
 public:
-    Manager();
+    Manager(const std::string &mountpoint);
 
     void run();
 
     ~Manager();
 
 private:
-    Fs fs;
     uv_loop_t *loop;
+    Setupper setupper;
+    Fs fs;
 
     void fs_init_callback();
 

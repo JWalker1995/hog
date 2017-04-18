@@ -95,6 +95,7 @@ void Fs::hook_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     if (parent != 1 || strcmp(name, hello_name) != 0)
         fuse_reply_err(req, ENOENT);
     else {
+        struct fuse_entry_param e;
         memset(&e, 0, sizeof(e));
         e.ino = 2;
         e.attr_timeout = 1.0;
@@ -198,8 +199,8 @@ Fs::Fs(int source_fd, const char *mountpoint)
     CWrapper::call("fuse_set_signal_handlers", fuse_set_signal_handlers, se);
     fuse_session_add_chan(se, ch);
 
-    size_t bufsize = fuse_chan_bufsize(ch);
-    recv_buf = new char[bufsize];
+    recv_buf_size = fuse_chan_bufsize(ch);
+    recv_buf_mem = new char[recv_buf_size];
 
     int flags = CWrapper::call("fcntl", fcntl, get_fd(), F_GETFL, 0);
     CWrapper::call("fcntl", fcntl, get_fd(), F_SETFL, flags | O_NONBLOCK);
@@ -215,8 +216,8 @@ bool Fs::should_exit() const {
 
 void Fs::try_recv() {
     struct fuse_buf fbuf = {
-        .mem = recv_buf,
-        .size = bufsize,
+        .mem = recv_buf_mem,
+        .size = recv_buf_size,
     };
 
     int res = fuse_session_receive_buf(se, &fbuf, &ch);
@@ -224,14 +225,14 @@ void Fs::try_recv() {
     if (res == -EINTR) {return;}
     if (res == -EAGAIN) {return;}
     if (res < 0) {
-        CWrapper::handle_error(res, "fuse_session_receive_buf", se, &recv_buf, &tmpch);
+        CWrapper::handle_error(res, "fuse_session_receive_buf", se, &fbuf, &ch);
     }
 
     fuse_session_process_buf(se, &fbuf, ch);
 }
 
-void Fs::~Fs() {
-    delete[] recv_buf;
+Fs::~Fs() {
+    delete[] recv_buf_mem;
 
     fuse_session_reset(se);
 

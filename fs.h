@@ -5,7 +5,6 @@
 #include <exception>
 
 #include "include_fuse.h"
-#include "virtualnode.h"
 #include "jw_util/methodcallback.h"
 
 class Fs {
@@ -57,10 +56,11 @@ private:
     const char *mountpoint;
     struct fuse_chan *ch;
     struct fuse_session *se;
+    char *recv_buf_mem;
+    std::size_t recv_buf_size;
 
     //VirtualNode source_root;
     jw_util::MethodCallback<> init_callback;
-    char *recv_buf;
 
     fuse_lowlevel_ops ops = {
         .init       = Fs::hook_init,
