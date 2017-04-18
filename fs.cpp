@@ -10,9 +10,6 @@
 
 #include "fs.h"
 
-#define FUSE_USE_VERSION 26
-#include <fuse_lowlevel.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,9 +71,26 @@ void Fs::hook_getattr(fuse_req_t req, fuse_ino_t ino,
 
 void Fs::hook_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
+    /*
+    Fs *inst = get_instance(req);
+    try {
+        struct fuse_entry_param entry;
+        memset(&entry, 0, sizeof(entry));
+        entry.ino = inst->tree.get_node(parent)->lookup(name);
+        entry.attr_timeout = 1.0;
+        entry.entry_timeout = 1.0;
+        memcpy(entry.attr, )
+        apply_stat(entry.attr, entry.ino);
+
+    } catch (const VirtualTree::InodeException &ex) {
+        fuse_reply_err(req, ENOENT);
+    } catch (const VirtualNode::LookupException &ex) {
+        fuse_reply_err(req, ENOENT);
+    }
+*/
     std::cout << "lookup " << name << std::endl;
 
-    struct fuse_entry_param e;
+
 
     if (parent != 1 || strcmp(name, hello_name) != 0)
         fuse_reply_err(req, ENOENT);
@@ -170,18 +184,56 @@ void Fs::hook_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
                            size_t size, off_t off, struct fuse_file_info *fi) {
 }
 
-void Fs::start(const char *mountpoint) {
+Fs::Fs(int source_fd, const char *mountpoint)
+    //: source_root(source_fd)
+    : init_callback(jw_util::MethodCallback<>::create_dummy())
+{
     char *argv[] = {
         (char *) "fuse_bindings_dummy"
     };
     struct fuse_args args = FUSE_ARGS_INIT(1, argv);
 
-    struct fuse_chan *ch = CWrapper::call("fuse_mount", fuse_mount, mountpoint, &args);
-    struct fuse_session *se = CWrapper::call("fuse_lowlevel_new", fuse_lowlevel_new, &args, &ops, sizeof(ops), this);
+    ch = CWrapper::call("fuse_mount", fuse_mount, mountpoint, &args);
+    se = CWrapper::call("fuse_lowlevel_new", fuse_lowlevel_new, &args, &ops, sizeof(ops), this);
     CWrapper::call("fuse_set_signal_handlers", fuse_set_signal_handlers, se);
     fuse_session_add_chan(se, ch);
 
-    CWrapper::call("fuse_session_loop", fuse_session_loop, se);
+    size_t bufsize = fuse_chan_bufsize(ch);
+    recv_buf = new char[bufsize];
+
+    int flags = CWrapper::call("fcntl", fcntl, get_fd(), F_GETFL, 0);
+    CWrapper::call("fcntl", fcntl, get_fd(), F_SETFL, flags | O_NONBLOCK);
+}
+
+int Fs::get_fd() const {
+    return fuse_chan_fd(ch);
+}
+
+bool Fs::should_exit() const {
+    return fuse_session_exited(se);
+}
+
+void Fs::try_recv() {
+    struct fuse_buf fbuf = {
+        .mem = recv_buf,
+        .size = bufsize,
+    };
+
+    int res = fuse_session_receive_buf(se, &fbuf, &ch);
+
+    if (res == -EINTR) {return;}
+    if (res == -EAGAIN) {return;}
+    if (res < 0) {
+        CWrapper::handle_error(res, "fuse_session_receive_buf", se, &recv_buf, &tmpch);
+    }
+
+    fuse_session_process_buf(se, &fbuf, ch);
+}
+
+void Fs::~Fs() {
+    delete[] recv_buf;
+
+    fuse_session_reset(se);
 
     fuse_remove_signal_handlers(se);
     fuse_session_remove_chan(ch);

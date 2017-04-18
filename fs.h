@@ -1,12 +1,11 @@
 #ifndef HOG_FS_H
 #define HOG_FS_H
 
-#define FUSE_USE_VERSION 26
-#include <fuse_lowlevel.h>
-
 #include <string>
 #include <exception>
 
+#include "include_fuse.h"
+#include "virtualnode.h"
 #include "jw_util/methodcallback.h"
 
 class Fs {
@@ -25,16 +24,17 @@ public:
         std::string msg;
     };
 
-    Fs(int source_fd)
-        : source_fd(source_fd)
-        , init_callback(jw_util::MethodCallback<>::create_dummy())
-    {}
+    Fs(int source_fd, const char *mountpoint);
 
     void set_init_callback(jw_util::MethodCallback<> callback) {
         init_callback = callback;
     }
 
-    void start(const char *mountpoint);
+    int get_fd() const;
+    bool should_exit() const;
+    void try_recv();
+
+    ~Fs();
 
 private:
     static void hook_init(void *userdata, struct fuse_conn_info *conn);
@@ -54,8 +54,13 @@ private:
         return static_cast<Fs *>(ptr);
     }
 
-    int source_fd;
+    const char *mountpoint;
+    struct fuse_chan *ch;
+    struct fuse_session *se;
+
+    //VirtualNode source_root;
     jw_util::MethodCallback<> init_callback;
+    char *recv_buf;
 
     fuse_lowlevel_ops ops = {
         .init       = Fs::hook_init,

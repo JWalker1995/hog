@@ -10,12 +10,32 @@
 #include <unistd.h>
 #include <sys/stat.h>
 
+#include <uv.h>
+
 #include <iostream>
 
-Manager::Manager() {
+Manager::Manager()
+    : fs(root_fd)
+{
+    loop = new uv_loop_t();
+    uv_loop_init(loop);
+
+    uv_poll_t fs_handle;
+    uv_poll_init(loop, &fs_handle, fs.get_fd());
+    fs_handle.data = this;
+    uv_poll_start(&fs_handle, UV_READABLE, &fs_handle_callback);
 }
 
 void Manager::run() {
+    uv_run(loop, UV_RUN_DEFAULT);
+}
+
+void Manager::~Manager() {
+    uv_loop_close(loop);
+    delete loop;
+    return;
+
+
     const char *abs_root_path = realpath(".", 0);
     int root_fd = CWrapper::call("open", open, abs_root_path, O_DIRECTORY);
     int parent_fd = CWrapper::call("openat", openat, root_fd, "..", O_DIRECTORY);
@@ -54,4 +74,19 @@ void Manager::run() {
 void Manager::fs_init_callback() {
     // Kickoff processes
     std::cout << "Init callback" << std::endl;
+}
+
+void Manager::fs_handle_callback(uv_poll_t *handle, int status, int events) {
+    (void) events;
+
+    if (status < 0) {
+        std::cerr << uv_err_name(status) << ": " << uv_strerror(status) << std::endl;
+        return;
+    }
+
+    get_instance(handle)->fs.try_recv();
+}
+
+Manager *Manager::get_instance(uv_poll_t *handle) {
+    return static_cast<Manager *>(handle->data);
 }
