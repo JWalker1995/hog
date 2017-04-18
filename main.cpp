@@ -3,7 +3,9 @@
 #include "manager.h"
 
 int main(int argc, char **argv) {
-    Manager manager("mnt/");
+    Params params(argc, argv);
+
+    Manager manager(params);
     manager.run();
 
     return 0;

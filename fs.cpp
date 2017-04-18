@@ -19,6 +19,7 @@
 #include <assert.h>
 
 #include "cwrapper.h"
+#include "uvwrapper.h"
 
 #include <iostream>
 
@@ -185,16 +186,17 @@ void Fs::hook_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
                            size_t size, off_t off, struct fuse_file_info *fi) {
 }
 
-Fs::Fs(int source_fd, const char *mountpoint)
-    //: source_root(source_fd)
-    : init_callback(jw_util::MethodCallback<>::create_dummy())
+Fs::Fs(const Params &params, uv_loop_t *loop, const std::string &source_dir, const std::string &mount_dir)
+    : source_dir(source_dir)
+    , mount_dir(mount_dir)
+    , init_callback(jw_util::MethodCallback<>::create_dummy())
 {
     char *argv[] = {
         (char *) "fuse_bindings_dummy"
     };
     struct fuse_args args = FUSE_ARGS_INIT(1, argv);
 
-    ch = CWrapper::call("fuse_mount", fuse_mount, mountpoint, &args);
+    ch = CWrapper::call("fuse_mount", fuse_mount, mount_dir.c_str(), &args);
     se = CWrapper::call("fuse_lowlevel_new", fuse_lowlevel_new, &args, &ops, sizeof(ops), this);
     CWrapper::call("fuse_set_signal_handlers", fuse_set_signal_handlers, se);
     fuse_session_add_chan(se, ch);
@@ -202,19 +204,28 @@ Fs::Fs(int source_fd, const char *mountpoint)
     recv_buf_size = fuse_chan_bufsize(ch);
     recv_buf_mem = new char[recv_buf_size];
 
-    int flags = CWrapper::call("fcntl", fcntl, get_fd(), F_GETFL, 0);
-    CWrapper::call("fcntl", fcntl, get_fd(), F_SETFL, flags | O_NONBLOCK);
+    int fd = fuse_chan_fd(ch);
+    int flags = CWrapper::call("fcntl", fcntl, fd, F_GETFL, 0);
+    CWrapper::call("fcntl", fcntl, fd, F_SETFL, flags | O_NONBLOCK);
+
+    uv_poll_init(loop, &fs_handle, fd);
+    fs_handle.data = this;
+    uv_poll_start(&fs_handle, UV_READABLE, &handle_chan_ready);
 }
 
-int Fs::get_fd() const {
-    return fuse_chan_fd(ch);
+void Fs::handle_chan_ready(uv_poll_t *handle, int status, int events) {
+    (void) events;
+    UvWrapper::handle(status, "uv_poll_start");
+
+    get_instance(handle)->try_recv(handle);
 }
 
-bool Fs::should_exit() const {
-    return fuse_session_exited(se);
-}
+void Fs::try_recv(uv_poll_t *handle) {
+    if (fuse_session_exited(se)) {
+        uv_poll_stop(handle);
+        return;
+    }
 
-void Fs::try_recv() {
     struct fuse_buf fbuf = {
         .mem = recv_buf_mem,
         .size = recv_buf_size,
@@ -225,7 +236,7 @@ void Fs::try_recv() {
     if (res == -EINTR) {return;}
     if (res == -EAGAIN) {return;}
     if (res < 0) {
-        CWrapper::handle_error(res, "fuse_session_receive_buf", se, &fbuf, &ch);
+        CWrapper::handle(res, "fuse_session_receive_buf", se, &fbuf, &ch);
     }
 
     fuse_session_process_buf(se, &fbuf, ch);
@@ -239,5 +250,5 @@ Fs::~Fs() {
     fuse_remove_signal_handlers(se);
     fuse_session_remove_chan(ch);
     fuse_session_destroy(se);
-    fuse_unmount(mountpoint, ch);
+    fuse_unmount(mount_dir.c_str(), ch);
 }

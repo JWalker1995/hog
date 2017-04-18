@@ -1,25 +1,31 @@
-#ifndef CWRAPPER_H
-#define CWRAPPER_H
+#ifndef UVWRAPPER_H
+#define UVWRAPPER_H
 
 #include "jw_util/to_string.h"
 
 #include <string>
 
-class CWrapper {
+#include <uv.h>
+
+class UvWrapper {
 public:
     class Exception : public std::exception {
     public:
-        Exception()
+        Exception(const std::string &msg)
+            : msg(msg)
         {}
 
         virtual const char *what() const noexcept {
-            return "CWrapper::Exception";
+            return msg.c_str();
         }
+
+    private:
+        std::string msg;
     };
 
-    template <typename FuncType, typename... ArgTypes>
-    static auto call(const std::string &func_name, FuncType func, ArgTypes... args) {
-        auto res = func(args...);
+    template <typename... ArgTypes>
+    static signed int call(const std::string &func_name, signed int (* func)(ArgTypes...), ArgTypes... args) {
+        signed int res = func(args...);
         handle<ArgTypes...>(res, func_name, args...);
         return res;
     }
@@ -27,17 +33,8 @@ public:
     template <typename... ArgTypes>
     static void handle(signed int res, const std::string &func_name, ArgTypes... args) {
         if (res < 0) {
-            std::string msg = func_name + "(" + args_to_string(args...) + ") -> " + std::to_string(res);
-            perror(msg.c_str());
-            throw Exception();
-        }
-    }
-    template <typename... ArgTypes>
-    static void handle(void *res, const std::string &func_name, ArgTypes... args) {
-        if (!res) {
-            std::string msg = func_name + "(" + args_to_string(args...) + ") -> (void*)NULL";
-            perror(msg.c_str());
-            throw Exception();
+            std::string msg = func_name + "(" + args_to_string(args...) + ") -> " + std::to_string(res) + " " + uv_err_name(res) + " " + uv_strerror(res);
+            throw Exception(msg);
         }
     }
 
@@ -57,4 +54,4 @@ private:
     }
 };
 
-#endif // CWRAPPER_H
+#endif // UVWRAPPER_H

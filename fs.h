@@ -4,8 +4,12 @@
 #include <string>
 #include <exception>
 
+#include <uv.h>
+
 #include "include_fuse.h"
 #include "jw_util/methodcallback.h"
+
+#include "params.h"
 
 class Fs {
 public:
@@ -23,19 +27,17 @@ public:
         std::string msg;
     };
 
-    Fs(int source_fd, const char *mountpoint);
+    Fs(const Params &params, uv_loop_t *loop, const std::string &source_dir, const std::string &mount_dir);
+    ~Fs();
 
     void set_init_callback(jw_util::MethodCallback<> callback) {
         init_callback = callback;
     }
 
-    int get_fd() const;
-    bool should_exit() const;
-    void try_recv();
-
-    ~Fs();
-
 private:
+    static void handle_chan_ready(uv_poll_t* handle, int status, int events);
+    void try_recv(uv_poll_t *handle);
+
     static void hook_init(void *userdata, struct fuse_conn_info *conn);
     static void hook_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi);
     static void hook_lookup(fuse_req_t req, fuse_ino_t parent, const char *name);
@@ -53,11 +55,15 @@ private:
         return static_cast<Fs *>(ptr);
     }
 
-    const char *mountpoint;
+    const std::string &source_dir;
+    const std::string &mount_dir;
+
     struct fuse_chan *ch;
     struct fuse_session *se;
     char *recv_buf_mem;
     std::size_t recv_buf_size;
+
+    uv_poll_t fs_handle;
 
     //VirtualNode source_root;
     jw_util::MethodCallback<> init_callback;

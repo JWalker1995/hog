@@ -45,7 +45,7 @@ void VirtualTree::load_dir(VirtualNode &node) {
     }
 
     if (errno) {
-        CWrapper::handle_error((void *) 0, "readdir", ent);
+        CWrapper::handle((void *) 0, "readdir", ent);
     }
 
     closedir(dir);
