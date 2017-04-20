@@ -7,7 +7,9 @@
 static void copy_string(char *dst, const std::string &src) {
     std::size_t size = src.size() + 1;
     dst = new char[size];
-    std::copy_n(src.c_str(), size, dst);
+    for (std::size_t i = 0; i < size; i++) {
+        dst[i] = src.c_str()[i];
+    }
 }
 
 Process::Process(const ProcessEnv &env, const std::string &cmd) {

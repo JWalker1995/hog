@@ -67,15 +67,6 @@ private:
 
     //VirtualNode source_root;
     jw_util::MethodCallback<> init_callback;
-
-    fuse_lowlevel_ops ops = {
-        .init       = Fs::hook_init,
-        .lookup     = Fs::hook_lookup,
-        .getattr	= Fs::hook_getattr,
-        .readdir	= Fs::hook_readdir,
-        .open		= Fs::hook_open,
-        .read		= Fs::hook_read,
-    };
 };
 
 #endif // HOG_FS_H

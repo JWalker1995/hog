@@ -196,6 +196,14 @@ Fs::Fs(const Params &params, uv_loop_t *loop, const std::string &source_dir, con
     };
     struct fuse_args args = FUSE_ARGS_INIT(1, argv);
 
+    fuse_lowlevel_ops ops;
+    ops.init = Fs::hook_init;
+    ops.lookup = Fs::hook_lookup;
+    ops.getattr = Fs::hook_getattr;
+    ops.readdir = Fs::hook_readdir;
+    ops.open = Fs::hook_open;
+    ops.read = Fs::hook_read;
+
     ch = CWrapper::call("fuse_mount", fuse_mount, mount_dir.c_str(), &args);
     se = CWrapper::call("fuse_lowlevel_new", fuse_lowlevel_new, &args, &ops, sizeof(ops), this);
     CWrapper::call("fuse_set_signal_handlers", fuse_set_signal_handlers, se);
@@ -226,10 +234,9 @@ void Fs::try_recv(uv_poll_t *handle) {
         return;
     }
 
-    struct fuse_buf fbuf = {
-        .mem = recv_buf_mem,
-        .size = recv_buf_size,
-    };
+    struct fuse_buf fbuf;
+    fbuf.mem = recv_buf_mem;
+    fbuf.size = recv_buf_size;
 
     int res = fuse_session_receive_buf(se, &fbuf, &ch);
 
